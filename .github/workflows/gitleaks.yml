@@ -1,0 +1,41 @@
+# Reusable secret-detection workflow (gitleaks).
+#
+# This workflow has no triggers of its own. It is designed to be called
+# from other repositories via the `workflow_call` mechanism, so that every
+# project runs the same secret-scanning quality gate without duplicating
+# workflow definitions.
+#
+# When called, it checks out and scans the CALLING repository — not this
+# dev-infrastructure repository.
+#
+# Reference: https://github.com/gitleaks/gitleaks-action
+
+name: gitleaks
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    name: Secret detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out calling repository
+        uses: actions/checkout@v6
+        with:
+          # Full history is required: gitleaks inspects commit contents,
+          # not just the working tree of the latest commit.
+          fetch-depth: 0
+
+      - name: Scan for leaked secrets
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          # Token of the calling repository, available automatically when a
+          # reusable workflow is invoked. No custom secrets are needed.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Findings are reported only as a failed check in the workflow run,
+          # not as comments on the pull request.
+          GITLEAKS_ENABLE_COMMENTS: "false"
