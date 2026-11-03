@@ -1,0 +1,73 @@
+# Reusable Flutter analyze and test workflow.
+#
+# This workflow has no triggers of its own. It is designed to be called
+# from other repositories via the `workflow_call` mechanism, so that every
+# Flutter project runs the same pub-get/analyze/test quality gate without
+# duplicating workflow definitions.
+#
+# When called, it checks out and analyzes the CALLING repository — not this
+# dev-infrastructure repository.
+#
+# Reference: https://github.com/subosito/flutter-action
+
+name: flutter-ci
+
+on:
+  workflow_call:
+    inputs:
+      # Flutter SDK version to install. Accepts an exact version
+      # (e.g. "3.24.0") or a major-version wildcard (e.g. "3.x"),
+      # resolved on the stable channel.
+      flutter-version:
+        description: "Flutter SDK version to install (e.g. 3.24.0)"
+        type: string
+        required: true
+      # Path to the Flutter project directory that contains pubspec.yaml
+      # (e.g. ./apps/mobile).
+      project-directory:
+        description: "Path to the Flutter project directory (contains pubspec.yaml)"
+        type: string
+        required: true
+      # Set to false to skip the test step (e.g. analyze-only pipelines).
+      run-tests:
+        description: "Whether to run tests after analysis"
+        type: boolean
+        required: false
+        default: true
+
+# Least-privilege access: read-only access to repository contents.
+permissions:
+  contents: read
+
+jobs:
+  flutter-ci:
+    name: Analyze and test (Flutter)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out calling repository
+        uses: actions/checkout@v6
+
+      - name: Install Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ inputs.flutter-version }}
+
+      # The caller-supplied project directory is passed through the
+      # step-level `working-directory` field instead of being interpolated
+      # into `run` scripts, so the value can never be interpreted as shell
+      # syntax (script-injection hardening recommended by GitHub). Unlike
+      # the dotnet CLI, the flutter CLI resolves the project from the
+      # current directory, so all three steps below run inside the same
+      # caller-supplied directory.
+      - name: Install dependencies
+        working-directory: ${{ inputs.project-directory }}
+        run: flutter pub get
+
+      - name: Analyze code
+        working-directory: ${{ inputs.project-directory }}
+        run: flutter analyze
+
+      - name: Run tests
+        if: inputs.run-tests
+        working-directory: ${{ inputs.project-directory }}
+        run: flutter test
