@@ -1,0 +1,67 @@
+# Reusable .NET build and test workflow.
+#
+# This workflow has no triggers of its own. It is designed to be called
+# from other repositories via the `workflow_call` mechanism, so that every
+# .NET project runs the same restore/build/test quality gate without
+# duplicating workflow definitions.
+#
+# When called, it checks out and builds the CALLING repository — not this
+# dev-infrastructure repository.
+
+name: dotnet-ci
+
+on:
+  workflow_call:
+    inputs:
+      # .NET SDK version to install (e.g. "10.0.x", "8.0.x").
+      dotnet-version:
+        description: ".NET SDK version to install (e.g. 10.0.x)"
+        type: string
+        required: true
+      # Path to the solution or project file to build (e.g. ./src/App.sln).
+      project-path:
+        description: "Path to the solution or project file to build"
+        type: string
+        required: true
+      # Set to false to skip the test step (e.g. build-only pipelines).
+      run-tests:
+        description: "Whether to run tests after the build"
+        type: boolean
+        required: false
+        default: true
+
+# Least-privilege access: read-only access to repository contents.
+permissions:
+  contents: read
+
+jobs:
+  dotnet-ci:
+    name: Build and test (.NET)
+    runs-on: ubuntu-latest
+    env:
+      # Pass the caller-supplied path through an environment variable
+      # instead of interpolating it directly into `run` scripts, so the
+      # value can never be interpreted as shell syntax (script-injection
+      # hardening recommended by GitHub). All three dotnet steps below
+      # quote and use this same value, so restore and build always cover
+      # exactly the solution or project — and its dependency graph —
+      # that the test step then runs with --no-build.
+      PROJECT_PATH: ${{ inputs.project-path }}
+    steps:
+      - name: Check out calling repository
+        uses: actions/checkout@v6
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Restore dependencies
+        run: dotnet restore "$PROJECT_PATH"
+
+      - name: Build
+        run: dotnet build "$PROJECT_PATH" --no-restore
+
+      - name: Run tests
+        if: inputs.run-tests
+        run: dotnet test "$PROJECT_PATH" --no-build
