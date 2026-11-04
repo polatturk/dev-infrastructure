@@ -1,0 +1,77 @@
+
+# Reusable Node.js build and test workflow.
+#
+# This workflow is designed to be called from other repositories
+# via workflow_call. It supports Node.js backend and frontend projects.
+
+name: node-ci
+
+on:
+  workflow_call:
+    inputs:
+      # Node.js version to install (e.g. "22.x", "24.x").
+      node-version:
+        description: "Node.js version to install"
+        type: string
+        required: true
+
+      # Path to the directory containing package.json and package-lock.json.
+      project-directory:
+        description: "Path to the Node.js project directory"
+        type: string
+        required: true
+
+      run-lint:
+        description: "Whether to run the lint script"
+        type: boolean
+        required: false
+        default: true
+
+      run-tests:
+        description: "Whether to run the test script"
+        type: boolean
+        required: false
+        default: true
+
+      run-build:
+        description: "Whether to run the build script"
+        type: boolean
+        required: false
+        default: true
+
+# Least-privilege access.
+permissions:
+  contents: read
+
+jobs:
+  node-ci:
+    name: Build and test (Node.js)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out calling repository
+        uses: actions/checkout@v6
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Install dependencies
+        working-directory: ${{ inputs.project-directory }}
+        run: npm ci
+
+      - name: Run lint
+        if: inputs.run-lint
+        working-directory: ${{ inputs.project-directory }}
+        run: npm run lint --if-present
+
+      - name: Run tests
+        if: inputs.run-tests
+        working-directory: ${{ inputs.project-directory }}
+        run: npm run test --if-present
+
+      - name: Build
+        if: inputs.run-build
+        working-directory: ${{ inputs.project-directory }}
+        run: npm run build --if-present
